@@ -2,6 +2,10 @@
 
 Research notes, September 2026. Target camera: **X-S20** (4 custom slots, C1–C4).
 
+> **Status:** built. The app in this repository implements the USB path described
+> below — recipe library, write to C1–C4 with read-back verification, slot capture
+> and backup. See the root `README.md` and `docs/PROTOCOL.md`.
+
 ## Verdict
 
 **Yes — doable, and doable for $0.** It is not speculative: the protocol is already

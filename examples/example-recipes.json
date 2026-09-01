@@ -1,0 +1,47 @@
+{
+  "format": "fujifilm-recipe-library",
+  "version": 1,
+  "note": "Two plain starting points written for this app — not anyone's published recipes. Edit freely.",
+  "recipes": [
+    {
+      "name": "Neutral Daylight",
+      "notes": "Low-contrast colour starting point for overcast light.",
+      "settings": {
+        "filmSimulation": 5,
+        "dynamicRange": 200,
+        "whiteBalance": 4,
+        "wbShiftRed": 0,
+        "wbShiftBlue": 0,
+        "highlightTone": -1,
+        "shadowTone": -0.5,
+        "color": 0,
+        "sharpness": -1,
+        "clarity": 0,
+        "grain": 1,
+        "colorChrome": 2,
+        "colorChromeFxBlue": 1,
+        "smoothSkin": 1
+      }
+    },
+    {
+      "name": "Acros Contrast",
+      "notes": "Black and white with a lift in the highlights and coarse grain.",
+      "settings": {
+        "filmSimulation": 12,
+        "dynamicRange": 100,
+        "whiteBalance": 2,
+        "wbShiftRed": 0,
+        "wbShiftBlue": 0,
+        "highlightTone": 1.5,
+        "shadowTone": 2,
+        "sharpness": 1,
+        "clarity": 2,
+        "grain": 5,
+        "colorChrome": 1,
+        "colorChromeFxBlue": 1,
+        "smoothSkin": 1,
+        "monoWarmCool": 1
+      }
+    }
+  ]
+}

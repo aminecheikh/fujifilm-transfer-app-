@@ -1,0 +1,11 @@
+{
+  "name": "fujifilm-recipe-transfer",
+  "version": "0.1.0",
+  "description": "Save Fujifilm film simulation recipes in the browser and push them into the camera's custom slots over USB",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "serve": "python3 -m http.server 8000"
+  }
+}
