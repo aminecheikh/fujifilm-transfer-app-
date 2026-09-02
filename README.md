@@ -76,6 +76,41 @@ Recipes captured from the camera store raw bytes as well as decoded values, and
 those bytes are replayed verbatim, so capture → write round trips are exact even
 where the decoding model is wrong.
 
+## Is wireless possible on your camera? (run this before building an iOS app)
+
+`tools/wireless-probe.mjs` answers the one open question: whether the X-S20 exposes
+its custom-preset properties over Wi-Fi. It connects over Fuji's PTP/IP and asks.
+Read-only, apart from setting the slot selector to the value it already holds —
+the only way to learn whether writes are permitted at all.
+
+On the camera:
+
+1. `NETWORK/USB SETTING → NETWORK SETTING` — join the same Wi-Fi as the computer.
+2. `NETWORK/USB SETTING → CONNECTION SETTING → CONNECTION MODE →`
+   **`WIRELESS TETHER SHOOTING FIXED`**
+3. Mode dial to P/A/S/M.
+4. Start tethering on the camera and pick this computer when it appears.
+
+Then, on the computer (same Wi-Fi):
+
+```sh
+node tools/wireless-probe.mjs --json wireless-report.json
+```
+
+It advertises itself on UDP 51562 and waits on TCP 51560 for the camera to dial in
+— in wireless tether mode the camera is the side that connects. Allow the incoming
+connection if the firewall asks. If the camera never appears, get its address from
+the camera's network settings and connect directly:
+
+```sh
+node tools/wireless-probe.mjs --ip 192.168.1.24
+```
+
+The verdict is printed in plain words, and the exit status is scriptable: `0`
+wireless works, `1` not exposed over Wi-Fi, `2` partial, `3` could not connect.
+The `--json` dump also doubles as the X-S20 property-map check — it records the raw
+bytes of all 24 preset properties.
+
 ## Layout
 
 | Path | What's in it |
@@ -88,7 +123,10 @@ where the decoding model is wrong.
 | `js/store.js` | library and sets, import/export |
 | `js/mock-camera.js` | the simulated camera behind demo mode and the tests |
 | `js/app.js` | UI |
-| `test/` | 25 tests, `npm test`, no dependencies |
+| `tools/fuji-ip.mjs` | PTP/IP transport, handshake and wireless-tether discovery |
+| `tools/wireless-probe.mjs` | the probe above |
+| `tools/mock-ip-camera.mjs` | a TCP camera impersonator, so the probe is tested before it meets hardware |
+| `test/` | 32 tests, `npm test`, no dependencies |
 | `docs/PROTOCOL.md` | the protocol in detail |
 | `docs/FEASIBILITY.md` | the research this was built from |
 
@@ -99,8 +137,10 @@ npm test
 ```
 
 Node's built-in runner, no install step. They cover container packing, value
-encodings, the conditional-write rules, and full slot write/verify/capture round
-trips against the mock camera.
+encodings, the conditional-write rules, full slot write/verify/capture round trips
+against the mock camera, and the wireless path: the PTP/IP init packet, Fuji's
+transaction-id-1 rule, the tether invite parsing, and a recipe written and verified
+over TCP.
 
 ## Limitations
 
@@ -109,7 +149,9 @@ trips against the mock camera.
   does not expose them as preset properties.
 * Dynamic range above DR100 is refused when the current ISO is too low; clarity is
   refused unless the camera is in still-image drive mode. Both are reported.
-* USB only for now. See the wireless section in `docs/PROTOCOL.md`.
+* USB only for now — wireless needs a native app (a browser cannot open a TCP
+  socket). `docs/PLATFORMS.md` explains why; the probe above tells you whether it
+  is worth building.
 * Not affiliated with or endorsed by Fujifilm.
 
 ## Licence

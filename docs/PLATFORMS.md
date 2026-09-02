@@ -39,10 +39,29 @@ in tether mode, then wireless recipe writing is very likely reachable through
 wireless tether. Nobody has published a confirmation, and FujiStyle lists its own
 wireless support as "coming soon", so treat it as plausible and untested.
 
-**How to settle it in an afternoon:** put the camera in WIRELESS TETHER SHOOTING
-FIXED, connect from a machine that can open sockets, run libfuji's handshake, and
-try `GetDevicePropValue(0xD18C)`. If it answers, wireless works; if it returns
-`DevicePropNotSupported`, it does not.
+**This is now testable in five minutes:** `tools/wireless-probe.mjs` does exactly
+that — camera in WIRELESS TETHER SHOOTING FIXED, `node tools/wireless-probe.mjs`,
+and it prints whether `0xD18C`–`0xD1A5` answer over Wi-Fi and whether writes are
+accepted. See the README for the steps.
+
+The wireless flow it implements, from libfuji's `discovery.c` and `fuji.c`:
+
+1. The host advertises itself with a UDP broadcast on port **51562**
+   (`DISCOVERY * HTTP/1.1 … SERVICE: PCSS/1.0`) and listens on TCP **51560**.
+2. The camera dials the host on 51560 and announces itself in an HTTP-ish message
+   carrying `DSC` (its IP), `CAMERANAME` and `DSCPORT`. The host replies
+   `HTTP/1.1 200 OK`.
+3. The host opens a TCP connection to the camera's address and sends an 82-byte
+   PTP/IP `InitCommandRequest` (type 1) with Fuji's protocol version `0x8F53E4F2`,
+   a 16-byte client GUID and a 54-byte UTF-16LE client name.
+4. `OpenSession` follows with session id 1 and **transaction id 1** — Fuji starts
+   at 1, not 0, contrary to the PTP standard.
+5. From there wireless tether is *USB-style containers over TCP*, so every layer
+   above the transport is unchanged. In libfuji's words: "Wireless tether uses USB
+   style communication."
+
+That last point is why `tools/fuji-ip.mjs` is only ~250 lines and reuses
+`js/ptp.js`'s container code verbatim.
 
 Note also `PTP_DPC_FUJI_SetUSBMode` (`0xD15D`) and `PTP_DPC_FUJI_USBMode`
 (`0xD16E`, where 5 = tether and 6 = raw conv): the mode may be switchable over the
