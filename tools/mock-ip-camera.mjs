@@ -13,7 +13,8 @@ import { MockCameraTransport } from '../js/mock-camera.js'
 
 const u32 = value => { const b = Buffer.alloc(4); b.writeUInt32LE(value >>> 0); return b }
 
-export function startMockIpCamera({ port = 0, model = 'X-S20 (mock over IP)', presets = true } = {}) {
+export function startMockIpCamera({ port = 0, model = 'X-S20 (mock over IP)', presets = true, initFailures = 0 } = {}) {
+  let failuresLeft = initFailures // cameras routinely reject the first init or two
   const server = net.createServer(socket => {
     const camera = new MockCameraTransport({ model })
     let buffer = Buffer.alloc(0)
@@ -35,6 +36,12 @@ export function startMockIpCamera({ port = 0, model = 'X-S20 (mock over IP)', pr
         buffer = buffer.subarray(length)
 
         if (!handshakeDone) {
+          if (failuresLeft > 0) {
+            failuresLeft--
+            const fail = Buffer.concat([u32(12), u32(5), u32(0)]) // InitFail
+            socket.write(fail)
+            continue
+          }
           // InitCommandRequest -> InitCommandAck, camera name 12 bytes into the payload
           const name = Buffer.alloc(54)
           Buffer.from(`${model}\0`, 'utf16le').copy(name)

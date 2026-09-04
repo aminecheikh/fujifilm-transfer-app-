@@ -18,11 +18,17 @@
  *   --wait <sec>     how long to wait for the camera (default 180)
  *   --json <file>    write the full property dump to a file
   --scan           with --ip: report which of the camera's ports are open
+  --name <text>    client name sent to the camera (default: this computer's name)
+  --attempts <n>   handshake attempts before giving up (default 4)
  */
 
 import { writeFile } from 'node:fs/promises'
 
-import { FujiIpTransport, awaitTetherInvite, scanPorts, CANDIDATE_PORTS, FUJI_CMD_PORT } from './fuji-ip.mjs'
+import {
+  FujiIpTransport, connectWithRetries, awaitTetherInvite,
+  scanPorts, CANDIDATE_PORTS, FUJI_CMD_PORT,
+} from './fuji-ip.mjs'
+import os from 'node:os'
 import { FujiCamera, slotToRecipe } from '../js/camera.js'
 import { PTPOp, PTPResp, respName } from '../js/ptp.js'
 import { toHex } from '../js/binary.js'
@@ -50,6 +56,8 @@ const USAGE = `Does this camera expose its custom-preset properties over Wi-Fi?
   --wait <sec>     how long to wait for the camera (default 180)
   --json <file>    write the full property dump to a file
   --scan           with --ip: report which of the camera's ports are open
+  --name <text>    client name sent to the camera (default: this computer's name)
+  --attempts <n>   handshake attempts before giving up (default 4)
 
 Read-only apart from one harmless write: the slot selector set to the value it
 already holds, which is the only way to learn whether writes are permitted.
@@ -69,6 +77,8 @@ const cliOptions = {
   wait: Number(value('--wait', 180)) * 1000,
   json: value('--json'),
   scan: flag('--scan'),
+  clientName: value('--name', os.hostname().replace(/\.local$/, '').slice(0, 24)),
+  attempts: Number(value('--attempts', 4)),
   out: console.log,
 }
 
@@ -124,8 +134,8 @@ async function scan(ip) {
 }
 
 async function connect(options) {
-  const transport = new FujiIpTransport(log)
   let target
+  let discovered = false
 
   if (options.ip) {
     target = { ip: options.ip, port: options.port || FUJI_CMD_PORT, model: '' }
@@ -134,11 +144,35 @@ async function connect(options) {
     heading('Waiting for the camera')
     out(CHECKLIST)
     target = await awaitTetherInvite({ log, advertise: options.advertise, timeout: options.wait })
+    discovered = true
   }
 
+  heading('Handshake')
   try {
-    await transport.connect(target.ip, target.port)
+    const { transport, name } = await connectWithRetries(target.ip, target.port, {
+      log,
+      clientName: options.clientName,
+      attempts: options.attempts,
+      // libfuji waits a second after discovery before dialling the camera.
+      settleMs: discovered ? 1000 : 0,
+    })
+    log(`handshake accepted by "${name || '(unnamed)'}"`)
+    return { transport, target, name }
   } catch (err) {
+    if (err.initFail) {
+      out(`\n  The camera rejected every handshake (${options.attempts} attempts).
+  Things that make this happen:
+    • the camera is showing a confirmation prompt — press OK on the camera and
+      run this again;
+    • it has dropped out of WIRELESS TETHER SHOOTING FIXED (re-select it);
+    • another program still holds the connection — quit X Acquire, Capture One,
+      Lightroom or the Fujifilm app, and try again;
+    • the camera expects a different client name — try --name with the name it
+      has registered for your Mac.
+
+  Also worth trying the other wireless mode: PLAYBACK MENU → WIRELESS
+  COMMUNICATION, then re-run with --ip.`)
+    }
     if (options.ip && /ECONNREFUSED/.test(err.message ?? '')) {
       out(`\n  Nothing is listening on ${target.ip}:${target.port}.`)
       out(`  The address answers, so a device is there — but that port is closed.`)

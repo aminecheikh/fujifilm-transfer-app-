@@ -142,3 +142,23 @@ test('a recipe can be written and verified over the IP transport', async () => {
   transport.close()
   server.close()
 })
+
+test('an InitFail is retried, the way a real camera needs', async () => {
+  // Fujifilm cameras routinely reject the first handshake or two; libfuji retries
+  // four times, so the probe must too.
+  const { server, port } = await startMockIpCamera({ initFailures: 2 })
+  const report = await probe({ ip: '127.0.0.1', port, ...silent })
+
+  assert.equal(report.verdict, 'yes')
+  assert.equal(report.readable, 24)
+  server.close()
+})
+
+test('a camera that always rejects gives up with a flagged error', async () => {
+  const { server, port } = await startMockIpCamera({ initFailures: 99 })
+  await assert.rejects(
+    () => probe({ ip: '127.0.0.1', port, attempts: 2, ...silent }),
+    err => err.initFail === true && /InitFail/.test(err.message),
+  )
+  server.close()
+})

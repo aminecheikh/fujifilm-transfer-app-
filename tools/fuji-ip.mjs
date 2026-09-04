@@ -81,6 +81,7 @@ class ByteReader {
 }
 
 const u32 = value => { const b = Buffer.alloc(4); b.writeUInt32LE(value >>> 0); return b }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 /** UTF-16LE, NUL-terminated, padded to `size` bytes. */
 function unicodeField(text, size) {
@@ -140,7 +141,9 @@ export class FujiIpTransport {
     const type = new DataView(ack.buffer, ack.byteOffset).getUint32(4, true)
 
     if (type === PTPIP_INIT_FAIL) {
-      throw new Error('camera refused the connection (InitFail) — is it in a wireless tether/communication mode, and did you confirm on the camera?')
+      const err = new Error('camera answered InitFail')
+      err.initFail = true
+      throw err
     }
     if (type !== PTPIP_INIT_COMMAND_ACK) this.log(`unexpected init response type ${type}`)
 
@@ -187,6 +190,48 @@ export class FujiIpTransport {
     this.socket?.destroy()
     this.socket = null
   }
+}
+
+/**
+ * Connect and handshake the way libfuji does, which is to say patiently.
+ *
+ * A Fujifilm camera routinely answers the first InitCommandRequest with InitFail
+ * and accepts the next one — libfuji's own wireless-tether setup retries up to
+ * four times, waits a second after discovery before dialling, and pauses 50ms
+ * after the ack because "the camera is thinking". The camera may also be showing
+ * a confirmation prompt that has to be accepted before it will say yes.
+ */
+export async function connectWithRetries(ip, port, {
+  log = () => {}, clientName = 'recipe-probe', attempts = 4, settleMs = 0, retryMs = 700,
+} = {}) {
+  if (settleMs) {
+    log(`giving the camera ${settleMs}ms to settle before dialling`)
+    await sleep(settleMs)
+  }
+
+  let transport = new FujiIpTransport(log)
+  await transport.connect(ip, port)
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const name = await transport.handshake(clientName)
+      await sleep(50) // the camera needs a beat before OpenSession
+      return { transport, name }
+    } catch (err) {
+      if (!err.initFail && !/closed|timed out/i.test(err.message) || attempt === attempts) {
+        transport.close()
+        throw err
+      }
+      log(`attempt ${attempt}/${attempts}: ${err.message} — retrying${attempt === 1 ? ' (this is normal; press OK if the camera is asking)' : ''}`)
+      await sleep(retryMs)
+      if (!transport.socket || transport.socket.destroyed) {
+        transport.close()
+        transport = new FujiIpTransport(log)
+        await transport.connect(ip, port)
+      }
+    }
+  }
+  throw new Error('handshake never accepted')
 }
 
 /**
