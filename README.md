@@ -85,26 +85,26 @@ the only way to learn whether writes are permitted at all.
 
 On the camera:
 
-1. `NETWORK/USB SETTING → NETWORK SETTING` — join the same Wi-Fi as the computer.
-2. `NETWORK/USB SETTING → CONNECTION SETTING → CONNECTION MODE →`
+1. `MENU → NETWORK/USB SETTING → NETWORK SETTING` — join the same Wi-Fi as the
+   computer (`SIMPLE SETUP` if the router has a WPS button, else `MANUAL SETUP`).
+2. `MENU → NETWORK/USB SETTING → CONNECTION MODE →`
    **`WIRELESS TETHER SHOOTING FIXED`**
 3. Mode dial to P/A/S/M.
-4. Start tethering on the camera and pick this computer when it appears.
 
-Then, on the computer (same Wi-Fi):
+The camera now waits, indicator lamp flashing amber. Nothing to press on the
+camera — the computer is the side that reaches out.
 
-```sh
-node tools/wireless-probe.mjs --json wireless-report.json
-```
-
-It advertises itself on UDP 51562 and waits on TCP 51560 for the camera to dial in
-— in wireless tether mode the camera is the side that connects. Allow the incoming
-connection if the firewall asks. If the camera never appears, get its address from
-the camera's network settings and connect directly:
+Read the camera's address from `MENU → NETWORK/USB SETTING → INFORMATION`, then on
+the computer (same Wi-Fi):
 
 ```sh
-node tools/wireless-probe.mjs --ip 192.168.1.24
+node tools/wireless-probe.mjs --ip 192.168.1.24 --json wireless-report.json
 ```
+
+Without `--ip` the probe tries to find the camera itself: it advertises this host
+on UDP 51562 and listens on TCP 51560 for the camera to announce its address, the
+way X Acquire's discovery works. That needs the firewall to allow incoming
+connections, so passing `--ip` is the reliable route.
 
 The verdict is printed in plain words, and the exit status is scriptable: `0`
 wireless works, `1` not exposed over Wi-Fi, `2` partial, `3` could not connect.

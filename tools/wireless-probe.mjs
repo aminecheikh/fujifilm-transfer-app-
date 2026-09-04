@@ -7,7 +7,7 @@
  * way to learn whether writes are permitted at all.
  *
  * Usage:
- *   node tools/wireless-probe.mjs                 wait for the camera to dial in
+ *   node tools/wireless-probe.mjs                 discover the camera on the network
  *   node tools/wireless-probe.mjs --ip 192.168.1.24   connect straight to a known address
  *   node tools/wireless-probe.mjs --json out.json     also save the raw dump
  *
@@ -40,7 +40,7 @@ const value = (name, fallback) => {
 
 const USAGE = `Does this camera expose its custom-preset properties over Wi-Fi?
 
-  node tools/wireless-probe.mjs                      wait for the camera to dial in
+  node tools/wireless-probe.mjs                      discover the camera on the network
   node tools/wireless-probe.mjs --ip 192.168.1.24    connect straight to a known address
 
   --ip <addr>      camera address, skipping discovery
@@ -75,15 +75,22 @@ const log = message => out(`  ${message}`)
 const heading = title => out(`\n${title}\n${'─'.repeat(title.length)}`)
 
 const CHECKLIST = `
-On the camera, before running this:
-  1. NETWORK/USB SETTING → NETWORK SETTING → join the same Wi-Fi as this computer.
-  2. NETWORK/USB SETTING → CONNECTION SETTING → CONNECTION MODE →
+On the camera (X-S20 menu names), before running this:
+  1. MENU → NETWORK/USB SETTING → NETWORK SETTING → join the same Wi-Fi as this
+     computer (SIMPLE SETUP for a WPS router, otherwise MANUAL SETUP).
+  2. MENU → NETWORK/USB SETTING → CONNECTION MODE →
      WIRELESS TETHER SHOOTING FIXED.
   3. Set the mode dial to P, A, S or M.
-  4. Start tethering on the camera and pick this computer when it appears.
+
+The camera then sits and waits — its indicator lamp flashes amber. There is no
+"connect" button to press: the computer is the side that reaches out.
+
+Easier and more reliable than waiting for discovery: read the camera's address
+from MENU → NETWORK/USB SETTING → INFORMATION and pass it directly:
+  node tools/wireless-probe.mjs --ip <that address>
 
 If your firewall asks whether node may accept incoming connections, say yes —
-the camera is the side that dials in.
+discovery needs it, though --ip does not.
 `
 
 async function connect(options) {
