@@ -104,7 +104,19 @@ node tools/wireless-probe.mjs --ip 192.168.1.24 --json wireless-report.json
 Without `--ip` the probe tries to find the camera itself: it advertises this host
 on UDP 51562 and listens on TCP 51560 for the camera to announce its address, the
 way X Acquire's discovery works. That needs the firewall to allow incoming
-connections, so passing `--ip` is the reliable route.
+connections.
+
+If a direct connection is refused, the camera is not listening on that port —
+in wireless tether mode it announces its own port during discovery. `--scan`
+reports which of the camera's ports are open:
+
+```sh
+node tools/wireless-probe.mjs --ip 192.168.0.77 --scan
+```
+
+A second mode is worth trying too: `PLAYBACK MENU → WIRELESS COMMUNICATION`, where
+the camera listens on 55740 directly — that is how the Fujifilm X App and Camera
+Remote connect, and it is arguably the more relevant mode for a phone app.
 
 The verdict is printed in plain words, and the exit status is scriptable: `0`
 wireless works, `1` not exposed over Wi-Fi, `2` partial, `3` could not connect.

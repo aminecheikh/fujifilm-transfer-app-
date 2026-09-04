@@ -17,11 +17,12 @@
  *   --no-advertise   listen for the camera without broadcasting this host
  *   --wait <sec>     how long to wait for the camera (default 180)
  *   --json <file>    write the full property dump to a file
+  --scan           with --ip: report which of the camera's ports are open
  */
 
 import { writeFile } from 'node:fs/promises'
 
-import { FujiIpTransport, awaitTetherInvite, FUJI_CMD_PORT } from './fuji-ip.mjs'
+import { FujiIpTransport, awaitTetherInvite, scanPorts, CANDIDATE_PORTS, FUJI_CMD_PORT } from './fuji-ip.mjs'
 import { FujiCamera, slotToRecipe } from '../js/camera.js'
 import { PTPOp, PTPResp, respName } from '../js/ptp.js'
 import { toHex } from '../js/binary.js'
@@ -48,6 +49,7 @@ const USAGE = `Does this camera expose its custom-preset properties over Wi-Fi?
   --no-advertise   listen for the camera without broadcasting this host
   --wait <sec>     how long to wait for the camera (default 180)
   --json <file>    write the full property dump to a file
+  --scan           with --ip: report which of the camera's ports are open
 
 Read-only apart from one harmless write: the slot selector set to the value it
 already holds, which is the only way to learn whether writes are permitted.
@@ -66,6 +68,7 @@ const cliOptions = {
   advertise: !flag('--no-advertise'),
   wait: Number(value('--wait', 180)) * 1000,
   json: value('--json'),
+  scan: flag('--scan'),
   out: console.log,
 }
 
@@ -91,7 +94,34 @@ from MENU → NETWORK/USB SETTING → INFORMATION and pass it directly:
 
 If your firewall asks whether node may accept incoming connections, say yes —
 discovery needs it, though --ip does not.
+
+Second mode worth trying if tether will not connect: PLAYBACK MENU →
+WIRELESS COMMUNICATION. There the camera listens on port 55740 directly, which
+is how the Fujifilm X App and Camera Remote connect — arguably the more relevant
+mode for a phone app anyway.
 `
+
+/** Diagnostic for a refused connection: what is this address actually running? */
+async function scan(ip) {
+  heading(`Scanning ${ip}`)
+  log(`trying ${CANDIDATE_PORTS.length} ports the camera might use…`)
+  const results = await scanPorts(ip)
+  const open = results.filter(r => r.state === 'open')
+  console.log()
+  for (const { port, state } of results) {
+    if (state === 'open') out(`  ${String(port).padStart(5)}  OPEN`)
+  }
+  if (open.length === 0) {
+    const refused = results.filter(r => r.state === 'refused').length
+    out(`  nothing open.`)
+    out(refused === results.length
+      ? `\n  Every port was actively refused, so a device IS at ${ip} — but it is not\n  listening for anything. Either the camera has left its waiting screen, or\n  ${ip} belongs to a different device on your network.`
+      : `\n  Most ports did not answer at all, which usually means nothing is at ${ip}\n  any more (addresses change when the camera reconnects). Re-check\n  MENU → NETWORK/USB SETTING → INFORMATION.`)
+  } else {
+    out(`\n  Try the handshake against an open port:\n    node tools/wireless-probe.mjs --ip ${ip} --port ${open[0].port}`)
+  }
+  return open
+}
 
 async function connect(options) {
   const transport = new FujiIpTransport(log)
@@ -106,7 +136,21 @@ async function connect(options) {
     target = await awaitTetherInvite({ log, advertise: options.advertise, timeout: options.wait })
   }
 
-  await transport.connect(target.ip, target.port)
+  try {
+    await transport.connect(target.ip, target.port)
+  } catch (err) {
+    if (options.ip && /ECONNREFUSED/.test(err.message ?? '')) {
+      out(`\n  Nothing is listening on ${target.ip}:${target.port}.`)
+      out(`  The address answers, so a device is there — but that port is closed.`)
+      await scan(target.ip)
+      out(`\n  In WIRELESS TETHER SHOOTING FIXED the camera announces its own port during
+  discovery rather than always using ${FUJI_CMD_PORT}. Run the probe without --ip to
+  let it discover the camera (allow the firewall prompt):
+
+    node tools/wireless-probe.mjs --json wireless-report.json`)
+    }
+    throw err
+  }
   const name = await transport.handshake('recipe-probe')
   log(`handshake accepted by "${name || '(unnamed)'}"`)
   return { transport, target, name }
@@ -115,6 +159,11 @@ async function connect(options) {
 async function probe(overrides = {}) {
   const options = { ...cliOptions, ...overrides }
   out = options.out ?? console.log
+
+  if (options.scan && options.ip) {
+    await scan(options.ip)
+    return { verdict: 'scan' }
+  }
   const { transport, target, name } = await connect(options)
   const camera = new FujiCamera(transport, log)
   const report = {

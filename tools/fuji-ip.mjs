@@ -189,6 +189,32 @@ export class FujiIpTransport {
   }
 }
 
+/**
+ * Which of the camera's TCP ports are open.
+ *
+ * Worth knowing when a direct connect is refused: in wireless tether mode the
+ * camera announces its command port during discovery rather than always sitting
+ * on 55740, and in some modes it listens on nothing until a client discovers it.
+ */
+export async function scanPorts(ip, ports = CANDIDATE_PORTS, timeoutMs = 800) {
+  const probeOne = port => new Promise(resolve => {
+    const socket = net.createConnection({ host: ip, port })
+    const done = state => { socket.destroy(); resolve({ port, state }) }
+    socket.setTimeout(timeoutMs, () => done('no answer'))
+    socket.once('connect', () => done('open'))
+    socket.once('error', err => done(err.code === 'ECONNREFUSED' ? 'refused' : err.code ?? 'error'))
+  })
+  return Promise.all(ports.map(probeOne))
+}
+
+export const CANDIDATE_PORTS = [
+  80, 443, 8080,      // the camera's own web services, if any
+  15740,              // standard PTP/IP
+  51540, 51541, 51542, // PC AutoSave
+  51560, 51562,       // wireless tether handshake / discovery
+  55740, 55741, 55742, 55743, // Fuji command, event, liveview
+]
+
 /** Every IPv4 broadcast address this machine can reach, plus the global one. */
 export function broadcastAddresses() {
   const found = []
